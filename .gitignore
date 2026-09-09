@@ -1,0 +1,40 @@
+# ===== Unity generated =====
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/[Pp]rojectSettings/[Bb]oot.config
+/Assets/AssetStoreTools*
+
+# ===== IDE =====
+/.vs/
+/.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ===== OS / misc =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== local copies / backups (not part of the build) =====
+/_backups/
+
+# ===== logs / temp =====
+*.log
+crashlytics-build.properties
