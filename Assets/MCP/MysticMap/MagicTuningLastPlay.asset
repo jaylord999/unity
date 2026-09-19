@@ -1,0 +1,225 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cdb7fbd41ae30c24b950c941fd2276be, type: 3}
+  m_Name: MagicTuningLastPlay
+  m_EditorClassIdentifier: Assembly-CSharp::MysticMap.MagicTuningPreset
+  circleScale: 1.6
+  circleHeightScale: 0.25
+  chargeSwell: 0.284
+  chargeSpinUp: 1.2
+  swapCirclesEachLevel: 1
+  circlesBounceWithSlime: 0
+  groundLift: 0
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  thresholdScale: 1
+  thresholdBias: 0
+  environmentScale: 1
+  auraWindStrength: 0.6
+  auraWindScale: 1
+  rockBreakPower: 1.5
+  debrisPerHit: 6
+  debrisPerExplosion: 16
+  debrisPrefabs: []
+  overchargeWindow: 2.5
+  overchargePerSecond: 0.25
+  overchargeCap: 1
+  minimumHoldToCast: 0.12
+  releaseCollapse: 0.18
+  layout: 4
+  levels:
+  - name: Gale Slash
+    holdToReach: 1
+    damage: 14
+    circleScale: 1
+    environmentScale: 1
+    maxChargeRadius: 0
+    layers:
+    - name: Magic circle
+      diameter: 3.6
+      height: 0.02
+      orbitRadius: 0
+      tilt: 0
+      spin: 14
+      orbit: 0
+      pulse: 0.03
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 1
+    - name: Buff
+      diameter: 2.6
+      height: 0.8
+      orbitRadius: 0
+      tilt: 0
+      spin: 0
+      orbit: 0
+      pulse: 0.05
+      growIn: 0.35
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 2
+  - name: Frost Edge
+    holdToReach: 1.6
+    damage: 30
+    circleScale: 1
+    environmentScale: 1
+    maxChargeRadius: 0
+    layers:
+    - name: Freeze circle
+      diameter: 4.2
+      height: 0.02
+      orbitRadius: 0
+      tilt: 0
+      spin: -18
+      orbit: 0
+      pulse: 0.04
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 1
+    - name: Magic shield blue
+      diameter: 3.2
+      height: 0.8
+      orbitRadius: 0
+      tilt: 0
+      spin: 22
+      orbit: 0
+      pulse: 0.04
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 2
+  - name: Volt Arc
+    holdToReach: 3.4
+    damage: 52
+    circleScale: 1
+    environmentScale: 1
+    maxChargeRadius: 5.5
+    layers:
+    - name: Magic circle 2
+      diameter: 4.8
+      height: 0.02
+      orbitRadius: 0
+      tilt: 0
+      spin: 22
+      orbit: 0
+      pulse: 0.05
+      growIn: 0.35
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 1
+    - name: Lightning aura
+      diameter: 3.4
+      height: 0.9
+      orbitRadius: 0
+      tilt: 0
+      spin: 0
+      orbit: 0
+      pulse: 0.05
+      growIn: 0.35
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 2
+  - name: Crystal Bloom
+    holdToReach: 5.6
+    damage: 82
+    circleScale: 1
+    environmentScale: 1
+    maxChargeRadius: 7
+    layers:
+    - name: Healing circle
+      diameter: 5.4
+      height: 0.02
+      orbitRadius: 0
+      tilt: 0
+      spin: -16
+      orbit: 0
+      pulse: 0.04
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 1
+    - name: Healing
+      diameter: 3.6
+      height: 0.9
+      orbitRadius: 0
+      tilt: 0
+      spin: 0
+      orbit: 0
+      pulse: 0.05
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 2
+  - name: Void Nova
+    holdToReach: 8.4
+    damage: 140
+    circleScale: 1
+    environmentScale: 1
+    maxChargeRadius: 10
+    layers:
+    - name: Plexus AoE
+      diameter: 6.5
+      height: 0.02
+      orbitRadius: 0
+      tilt: 0
+      spin: -10
+      orbit: 0
+      pulse: 0.03
+      growIn: 0.8
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 1
+    - name: Debuff
+      diameter: 4.2
+      height: 1
+      orbitRadius: 0
+      tilt: 0
+      spin: 0
+      orbit: 0
+      pulse: 0.06
+      growIn: 0.4
+      rimRiders: 0
+      riderScale: 0.22
+      riderOffset: 0.05
+      riderLap: 6
+      riderSpin: 120
+      group: 2

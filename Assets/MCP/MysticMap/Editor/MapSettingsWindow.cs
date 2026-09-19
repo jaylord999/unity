@@ -220,8 +220,8 @@ namespace MysticMap.EditorTools
             if (EditorGUI.EndChangeCheck()) Save();
 
             EditorGUILayout.HelpBox(
-                "Denser fields everywhere except the town; medium grass in lush zones and\n" +
-                "taller clumps grouped in patches, so the meadow varies naturally.",
+                "Dense fields everywhere - inside the town too (thinned a little there so the town floor still reads as a lived-in yard); medium grass in lush zones and\n" +
+                "taller clumps grouped in patches, so the meadow varies naturally; roads and the paved market square stay bare.",
                 MessageType.None);
 
             if (GUILayout.Button("Apply grass (re-bake the field)"))

@@ -50,6 +50,11 @@ namespace MysticMap
         public float roadClear = 6f;
         public bool keepTownClear = true;
 
+        [Tooltip("Let grass/flowers grow inside the walled town too. When on, the 'no-grow zone' " +
+                 "and the walled-town keep-clear band above are ignored so the town floor grows " +
+                 "grass as well. Roads are still kept bare.")]
+        public bool growInsideTown = true;
+
         public float groundOffset = 0.05f;
 
         public Terrain terrain;
@@ -122,12 +127,13 @@ namespace MysticMap
                     if (ox * ox + oz * oz > radius * radius) continue;      // too far
 
                     float nx = x - centerX, nz = z - centerZ;
-                    if (nx * nx + nz * nz < noZoneRadius * noZoneRadius) continue; // in the village
+                    // The village no-grow zone only applies while the town must stay bare.
+                    if (!growInsideTown && nx * nx + nz * nz < noZoneRadius * noZoneRadius) continue;
 
                     // Keep roads bare: no flowers/grass growing on or right beside a road.
                     if (keepRoadsClear && RoadDist(x, z) < roadClear) continue;
-                    // Keep the walled town clear too.
-                    if (keepTownClear && Mathf.Abs(nx) < 59f && Mathf.Abs(nz) < 49f) continue;
+                    // Keep the walled town clear too (unless grass is allowed inside it).
+                    if (!growInsideTown && keepTownClear && Mathf.Abs(nx) < 59f && Mathf.Abs(nz) < 49f) continue;
 
                     float presence = (rnd & 0xFFFF) / 65535f;
                     if (presence > density) { Release(key); continue; }      // empty spot
@@ -178,35 +184,8 @@ namespace MysticMap
             }
         }
 
-        // The same road network that is painted on the terrain, so the runtime grower can keep
-        // roads clear. Pairs of (startX,startZ, endX,endZ).
-        static readonly float[] RoadSegs =
-        {
-            500f, 30f, 500f, 970f,     // main N-S road
-             30f, 870f, 970f, 870f,    // country E-W north
-             30f, 170f, 970f, 170f,    // country E-W south
-            185f, 30f, 185f, 970f,     // country N-S west
-            815f, 30f, 815f, 970f,     // country N-S east
-            449f, 520f, 551f, 520f     // interior E-W avenue
-        };
-
-        float RoadDist(float x, float z)
-        {
-            Vector2 p = new Vector2(x, z);
-            float best = float.MaxValue;
-            for (int i = 0; i + 3 < RoadSegs.Length; i += 4)
-                best = Mathf.Min(best, DistToSeg(new Vector2(RoadSegs[i], RoadSegs[i + 1]),
-                                                 new Vector2(RoadSegs[i + 2], RoadSegs[i + 3]), p));
-            return best;
-        }
-
-        static float DistToSeg(Vector2 a, Vector2 b, Vector2 p)
-        {
-            Vector2 ab = b - a;
-            float len = ab.sqrMagnitude;
-            float t = len > 0.0001f ? Mathf.Clamp01(Vector2.Dot(p - a, ab) / len) : 0f;
-            return Vector2.Distance(a + ab * t, p);
-        }
+        // The map's winding roads (shared with the terrain bake) so nothing grows on them.
+        float RoadDist(float x, float z) => MapRoads.Distance(x, z);
 
         GameObject PickPrefab(uint rnd)
         {

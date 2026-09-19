@@ -11,82 +11,21 @@ namespace MysticMap.EditorTools
     public static partial class MysticMapBuilder
     {
         // ---------------------------------------------------------------------
-        //  Additive "town" pass, run in-place on the already-built MysticMap scene.
-        //  It does NOT regenerate the walls/towers/gates (those are left untouched),
-        //  only: (1) the road network + ground splat, (2) trees/grass/plants get
-        //  cleared from every road, and (3) the town interior is re-filled with a
-        //  ring of houses hugging the walls plus significant landmark buildings in
-        //  the centre.
+        //  The old additive "extend town & roads / rebuild housing" pass has been REMOVED:
+        //  re-running it rebuilt the straight road network and re-created the town housing,
+        //  which is what wiped the authored map. The roads are now the shared WINDING network
+        //  (see MysticMap.MapRoads) and are (re)painted with:
+        //      MCP > Roads > Paint winding roads into the map
         // ---------------------------------------------------------------------
-        public static void ExtendTownAndRoads()
-        {
-            const string scenePath = "Assets/Scenes/MysticMap.unity";
-            if (!System.IO.File.Exists(scenePath))
-            {
-                Debug.LogWarning("[MysticMap] Scene not found: " + scenePath);
-                return;
-            }
-            var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
 
-            var terrain = FindSceneTerrain();
-            if (terrain == null || terrain.terrainData == null)
-            {
-                Debug.LogWarning("[MysticMap] No Terrain in the open scene. Build the map first.");
-                return;
-            }
-            _terrain = terrain;
-            _td = terrain.terrainData;
-
-            int hres = _td.heightmapResolution;
-            _spacing = _td.size.x / (hres - 1);
-            float[,] norm = _td.GetHeights(0, 0, hres, hres);
-            _h2 = new float[hres, hres];
-            for (int z = 0; z < hres; z++)
-                for (int x = 0; x < hres; x++)
-                    _h2[z, x] = norm[z, x] * _td.size.y;
-
-            SetExtendedRoads();
-
-            Log("Repainting ground splat with the extended road network...");
-            ApplySplatmap();
-            Log("Regenerating grass + trees (clear of roads)...");
-            ApplyGrassDetails();
-            ApplyTrees();
-            RemoveScatterFromRoads();
-            EditorUtility.SetDirty(_td);
-
-            RebuildTownHousing();
-
-            EditorSceneManager.SaveScene(scene, scenePath);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            Log("Town housing + extended road network complete.");
-        }
 
         // Roads that run through the town and then reach out toward the edges of the map,
         // all painted with the road terrain layer. The two country roads per axis spread
         // far from town so the road network visibly expands to the outer map.
         static void SetExtendedRoads()
         {
-            var roads = new List<Vector2[]>();
-            float vx = Village.x, vz = Village.y;
-            const float Lo = 30f, Hi = 1000f - 30f;
-
-            // Main north-south road: runs through the fortress gates to both map edges.
-            roads.Add(new[] { new Vector2(vx, Lo), new Vector2(vx, Hi) });
-
-            // Countryside roads (north/south of town) reaching the east/west map edges.
-            roads.Add(new[] { new Vector2(Lo, vz - 350f), new Vector2(Hi, vz - 350f) });
-            roads.Add(new[] { new Vector2(Lo, vz + 350f), new Vector2(Hi, vz + 350f) });
-
-            // Countryside roads (west/east of town) reaching the north/south map edges.
-            roads.Add(new[] { new Vector2(vx - 315f, Lo), new Vector2(vx - 315f, Hi) });
-            roads.Add(new[] { new Vector2(vx + 315f, Lo), new Vector2(vx + 315f, Hi) });
-
-            // Interior east-west avenue inside the town (stops short of the solid side walls).
-            roads.Add(new[] { new Vector2(vx - (FortHX - 6f), vz), new Vector2(vx + (FortHX - 6f), vz) });
-
-            _roadPolys = roads;
+            // The winding map network - shared with the runtime spawners and the grass bake.
+            _roadPolys = MapRoads.Paths;
         }
 
         // Any scattered nature prop that now sits on a road, or inside the town, is removed
@@ -148,13 +87,13 @@ namespace MysticMap.EditorTools
 
             SetExtendedRoads();
             ApplyGrassDetails();
-            ApplyTrees();
+            ClearStoredTrees();
             RemoveScatterFromRoads();
             EditorUtility.SetDirty(_td);
             EditorSceneManager.SaveScene(scene, scene.path);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Log("Regenerated grass + trees clear of all roads (clean shoulder).");
+            Log("Regenerated grass clear of all roads (clean shoulder).");
         }
         // ---- Town interior: central landmarks + wall-aligned houses ------------------
         static void RebuildTownHousing()

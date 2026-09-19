@@ -391,9 +391,17 @@ namespace MysticMap.EditorTools
             return null;
         }
 
-        // Removes the STORED field grass/flowers (pure ambiance) from the Nature/Painted
-        // roots, keeping rocks, stones, mushrooms, bushes and trees.
-        public static int RemoveStoredFieldProps()
+        // Rocks, stones, mushrooms and bushes - the "clutter" that is spawned at runtime now.
+        static readonly System.Collections.Generic.HashSet<string> ClutterNames =
+            new System.Collections.Generic.HashSet<string>
+        {
+            "Rock1", "Rock2", "Rock3", "Stone1", "Stone1_detail", "Stone2", "Stone3",
+            "Mushroom1", "Mushroom2", "Mushroom3", "Mushroom4", "Mushroom5", "Bush1"
+        };
+
+        // Shared remover: drops every STORED prop instance under the Nature/Painted roots whose
+        // source prefab name is in the given set.
+        static int RemoveStored(System.Collections.Generic.HashSet<string> names, string what)
         {
             var list = new List<Transform>();
             foreach (var rn in PropRoots)
@@ -414,7 +422,7 @@ namespace MysticMap.EditorTools
                 if (child == null) continue;
                 string src = SourceNameOfPath(
                     PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(child.gameObject));
-                if (src != null && AmbientNames.Contains(src))
+                if (src != null && names.Contains(src))
                 {
                     Object.DestroyImmediate(child.gameObject);
                     removed++;
@@ -422,9 +430,17 @@ namespace MysticMap.EditorTools
             }
 
             EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
-            Debug.Log("GlowBaker: removed " + removed + " stored field grass/flowers (kept rocks/trees).");
+            Debug.Log("GlowBaker: removed " + removed + " stored " + what + ".");
             return removed;
         }
+
+        // Removes the STORED field grass/flowers (pure ambiance), keeping rocks/mushrooms/trees.
+        public static int RemoveStoredFieldProps() =>
+            RemoveStored(AmbientNames, "field grass/flowers (kept rocks/trees)");
+
+        // Removes the STORED rocks / stones / mushrooms / bushes (they are spawned at runtime now).
+        public static int RemoveStoredClutter() =>
+            RemoveStored(ClutterNames, "rocks/stones/mushrooms/bushes");
 
         // Adds the runtime "grass + flowers grow near the player" component, pre-loaded with
         // plain grass AND glowing flower prefabs. Nothing is stored.
@@ -442,6 +458,8 @@ namespace MysticMap.EditorTools
             comp.spacing = 2.5f;
             comp.density = 0.8f;
             comp.glowChance = 0.2f;
+            // Grass also grows inside the walled town (roads are still kept bare).
+            comp.growInsideTown = true;
 
             // PLAIN (non-glow) pool: plain grass + plain low plants.
             var plainList = new List<GameObject>();
@@ -484,8 +502,86 @@ namespace MysticMap.EditorTools
         [MenuItem("MCP/Ambient/Add runtime grass + flowers (near player, nothing stored)")]
         public static void MenuAddRuntimeFlowers() { AddRuntimeFlowers(); }
 
+        [MenuItem("MCP/Ambient/Add runtime rocks, stones & mushrooms (near player, nothing stored)")]
+        public static void MenuAddRuntimeScatter() { AddRuntimeScatter(); }
+
+        // Adds the runtime "rocks / stones / mushrooms / bushes grow near the player" component.
+        // Nothing is stored in the scene - it streams and disappears like the grass.
+        public static RuntimeScatter AddRuntimeScatter()
+        {
+            const string name = "Ambient Rocks & Mushrooms (Runtime)";
+            var go = GameObject.Find(name);
+            if (go == null) go = new GameObject(name);
+
+            var comp = go.GetComponent<RuntimeScatter>();
+            if (comp == null) comp = go.AddComponent<RuntimeScatter>();
+
+            var list = new List<GameObject>();
+            foreach (var n in new[]
+            {
+                "Rock1", "Rock2", "Rock3", "Stone1", "Stone1_detail", "Stone2", "Stone3",
+                "Mushroom1", "Mushroom2", "Mushroom3", "Mushroom4", "Mushroom5", "Bush1"
+            })
+            {
+                var pr = AssetDatabase.LoadAssetAtPath<GameObject>(PropsDir + "/" + n + ".prefab");
+                if (pr != null) list.Add(pr);
+            }
+            comp.prefabs = list.ToArray();
+
+            var cam = GameObject.FindGameObjectWithTag("MainCamera");
+            if (cam != null) comp.target = cam.transform;
+            var terr = Object.FindFirstObjectByType<Terrain>();
+            if (terr != null) comp.terrain = terr;
+
+            EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            Selection.activeGameObject = go;
+            Debug.Log("[MysticMap] Runtime clutter ready (" + comp.prefabs.Length +
+                      " prefabs: rocks, stones, mushrooms, bushes).");
+            return comp;
+        }
+
         [MenuItem("MCP/Ambient/Remove stored field grass & flowers (keep rocks/trees)")]
         public static void MenuRemoveStoredField() { RemoveStoredFieldProps(); }
+
+        // One-click full cleanup: removes EVERY stored ground prop - grass, plants, ferns,
+        // flowers, rocks, stones, mushrooms, bushes - plus any leftover glow. The map relies on
+        // the runtime spawners now, so none of it needs to be stored (and it is what made the
+        // scene file huge). The town, houses, trees, terrain and the *_Glow prefab ASSETS
+        // (still used by the runtime spawner) are kept.
+        public static int CleanStoredGrass(bool ask)
+        {
+            if (ask && !EditorUtility.DisplayDialog("Mystic Map",
+                    "Remove every stored ground prop (grass / plants / flowers / rocks / stones / " +
+                    "mushrooms / bushes, and the stored glow) from the open scene?\n\nThey are grown " +
+                    "by the runtime spawners now. The town, houses, trees and terrain are kept.",
+                    "Remove", "Cancel"))
+                return -1;
+
+            int removed = RemoveStoredFieldProps();
+            removed += RemoveStoredClutter();
+            MysticMapBuilder.RemoveGrassGlowField();
+            MysticMapBuilder.RemoveGrassSpriteGlows();
+
+            var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (scene.IsValid()) EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[MysticMap] Cleaned " + removed +
+                      " stored ground props (+ glow). The map now grows them at runtime.");
+            return removed;
+        }
+
+        [MenuItem("MCP/Ambient/Clean map: remove ALL stored nature props (runtime only)")]
+        public static void MenuCleanStoredGrass() { CleanStoredGrass(true); }
+
+        // Batch-mode / headless entry point (no dialogs).
+        public static void CleanStoredGrassBatch()
+        {
+            const string scenePath = "Assets/Scenes/MysticMap.unity";
+            if (System.IO.File.Exists(scenePath))
+                EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            CleanStoredGrass(false);
+        }
 
         // ---- Menu items --------------------------------------------------------------
         [MenuItem("MCP/Glow/1. Bake glowing prop prefabs")]

@@ -44,6 +44,11 @@ namespace MysticMap
         [Range(0f, 1f)] public float clusterDensity = 0.6f;
         public GameObject[] clusterPrefabs = new GameObject[0];
 
+        [Header("Walled town")]
+        [Tooltip("Let the roadside grass verge, flowers and small rocks grow inside the town too. " +
+                 "The bulky cargo clusters (carts / sacks) always stay clear of the houses and square.")]
+        public bool allowGrassInTown = true;
+
         const float FlowerMax = 260f;
         const float RockMax = 55f;
         const float ClusterMax = 12f;
@@ -71,15 +76,7 @@ namespace MysticMap
         {
             if (_built) return;
             _built = true;
-            _roads = new List<Vector2[]>
-            {
-                new[] { new Vector2(500f, 30f), new Vector2(500f, 970f) },     // main N-S road
-                new[] { new Vector2(30f, 870f), new Vector2(970f, 870f) },     // country E-W north
-                new[] { new Vector2(30f, 170f), new Vector2(970f, 170f) },     // country E-W south
-                new[] { new Vector2(185f, 30f), new Vector2(185f, 970f) },     // country N-S west
-                new[] { new Vector2(815f, 30f), new Vector2(815f, 970f) },     // country N-S east
-                new[] { new Vector2(449f, 520f), new Vector2(551f, 520f) }     // interior E-W avenue
-            };
+            _roads = MapRoads.Segments();   // the map's winding roads (shared with the bake)
             _despawnDist = radius + 14f;
         }
 
@@ -87,6 +84,9 @@ namespace MysticMap
         {
             BuildRoads();
             if (target == null) ResolveTarget();
+
+            // Let the slime's magic tear up the roadside flowers / rocks / carts as well.
+            MagicEnvironment.Register(transform, MagicEnvMode.Hide, radius + 16f);
         }
 
         void Update()
@@ -176,9 +176,14 @@ namespace MysticMap
                 float off = (Random.value < 0.5f ? -1f : 1f) * Random.Range(bandMin, bandMax);
                 Vector2 p2 = A + dir * t + perp * off;
 
-                // Keep clear of the walled town (no flowers/carts over houses or the square).
-                float dx = Mathf.Abs(p2.x - Town.x), dz = Mathf.Abs(p2.y - Town.y);
-                if (dx < FortX + 2f && dz < FortZ + 2f) continue;
+                // The grass verge, flowers and small rocks may grow inside the walled town now,
+                // but the bulky cargo clusters (carts / sacks) must stay clear of the houses
+                // and the square, so only those keep the town exclusion.
+                if (cluster || !allowGrassInTown)
+                {
+                    float dx = Mathf.Abs(p2.x - Town.x), dz = Mathf.Abs(p2.y - Town.y);
+                    if (dx < FortX + 2f && dz < FortZ + 2f) continue;
+                }
 
                 float y = SampleGround(p2.x, p2.y, c.y);
                 p = new Vector3(p2.x, y, p2.y);
@@ -240,6 +245,8 @@ namespace MysticMap
 
         void OnDisable()
         {
+            MagicEnvironment.Unregister(transform);
+
             for (int i = 0; i < transform.childCount; i++)
             {
                 var ch = transform.GetChild(i);

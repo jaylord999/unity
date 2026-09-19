@@ -17,7 +17,7 @@ namespace MysticMap.EditorTools
     /// a network of roads, terrain trees (auto LOD/culled), lots of grass as terrain
     /// detail, scattered ground-cover props that are streamed in only around the
     /// player, a small village, fog + a short camera far plane so only nearby
-    /// content is actually rendered, and a first-person player with gravity.
+    /// content is actually rendered, and a bouncing slime player seen from a third-person camera.
     /// </summary>
     public static partial class MysticMapBuilder
     {
@@ -57,6 +57,10 @@ namespace MysticMap.EditorTools
         const float FortHX = 57f;      // east / west walls
         const float FortHZ = 47f;      // north / south walls
         const float WallScale = 1.45f; // scale applied to the stone wall/tower pieces
+
+        // Grass is allowed to grow inside the fortress town too. It is thinned out by this
+        // factor so the compacted town floor still reads as a lived-in yard, not open meadow.
+        const float TownGrassScale = 0.6f;
 
         // How far the approach roads run out of the two main (north / south) gates.
         const float RoadLen = 175f;
@@ -156,7 +160,7 @@ namespace MysticMap.EditorTools
             ApplyHeights();
             ApplySplatmap();
             ApplyGrassDetails();
-            ApplyTrees();
+            ClearStoredTrees();
 
             AssetDatabase.CreateAsset(_td, TerrainDataPath);
             AssetDatabase.SaveAssets();
@@ -351,17 +355,7 @@ namespace MysticMap.EditorTools
         static void EnsureRoads()
         {
             if (_roadPolys != null) return;
-            var roads = new List<Vector2[]>();
-
-            // North / south main road through the two gates (long approach both ways).
-            roads.Add(new[] { new Vector2(Village.x, Village.y - RoadLen),
-                              new Vector2(Village.x, Village.y + RoadLen) });
-
-            // Interior east / west avenue linking the market square to the side quarters.
-            roads.Add(new[] { new Vector2(Village.x - (FortHX - 8f), Village.y),
-                              new Vector2(Village.x + (FortHX - 8f), Village.y) });
-
-            _roadPolys = roads;
+            _roadPolys = MapRoads.Paths;
         }
 
         static float RoadDistance(float x, float z)
@@ -446,15 +440,17 @@ namespace MysticMap.EditorTools
         // Returns a grass-field density factor for a world position (0 = no grass).
         static float GrassFactor(float x, float z, int hz)
         {
-            // Roads and the village/town stay clear of grass (plus a clean shoulder).
+            // Roads stay clear of grass (plus a clean shoulder).
             float rd = RoadDistance(x, z);
             if (rd < RoadHalfWidth + 4f) return 0f;
-            if (Vector2.Distance(new Vector2(x, z), Village) < PlazaRadius + 8f) return 0f;
 
-            // The whole fortress interior is kept clear of meadow grass (compact town floor).
-            float tax = Mathf.Abs(x - Village.x) - (FortHX + 4f);
-            float taz = Mathf.Abs(z - Village.y) - (FortHZ + 4f);
-            if (tax < 0f && taz < 0f) return 0f;
+            // The paved market square stays bare.
+            if (Vector2.Distance(new Vector2(x, z), Village) < PlazaRadius + 2f) return 0f;
+
+            // Grass grows inside the fortress town too; it is thinned with TownGrassScale
+            // further down so the compacted town floor still reads as a lived-in yard.
+            bool inFortress = Mathf.Abs(x - Village.x) < FortHX + 4f &&
+                              Mathf.Abs(z - Village.y) < FortHZ + 4f;
 
             // Broad lushness: some big areas are thick meadows, others thinner.
             float lush = Mathf.PerlinNoise(x * 0.0011f + 3f, z * 0.0011f + 7f);
@@ -463,8 +459,9 @@ namespace MysticMap.EditorTools
 
             float f = Mathf.Lerp(0.55f, 1.15f, lush);
             f *= Mathf.Lerp(0.55f, 1.35f, clump);
+            if (inFortress) f *= TownGrassScale;                 // town floor: thinner, tidier grass
 
-            // Still grow under/around trees (this field covers the whole map except the town).
+            // Still grow under/around trees (the field now covers the whole map, town included).
             int hx = Mathf.Clamp(Mathf.RoundToInt(x / _spacing), 0, HeightRes - 1);
             if (_h2 != null)
             {
@@ -537,74 +534,26 @@ namespace MysticMap.EditorTools
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
-        // ---- Trees (placed as Terrain trees: auto-LOD + distance culling by Unity) ----
+        // ---- Trees (NO LONGER baked) ------------------------------------------------
+        // Trees used to be stored as Terrain tree instances, which bloated the terrain asset
+        // with ~1600 entries. They now grow at runtime around the player instead - see
+        // RuntimeTrees and the "MCP > Trees" menu - keeping clear of the roads and the walled
+        // town. This list is still used to pick the runtime tree prefabs.
         static readonly string[] TreeNames =
         {
             "Oak_tree1", "Oak_tree3", "Deciduous_tree1", "Deciduous_tree4",
             "Pine_tree1", "Pine_tree2", "Birch_tree1", "Willow_tree1"
         };
 
-        static void ApplyTrees()
+        // Strips any trees an older build stored in the terrain, so nothing tree-related stays
+        // saved in the terrain asset / scene.
+        static void ClearStoredTrees()
         {
-            var prototypes = new List<TreePrototype>();
-            foreach (var name in TreeNames)
-            {
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(TreeDir + "/" + name + ".prefab");
-                if (prefab != null) prototypes.Add(new TreePrototype { prefab = prefab });
-                else Debug.LogWarning("Missing tree prefab: " + name);
-            }
-            if (prototypes.Count == 0) { Log("No tree prototypes found, skipping trees."); return; }
-            _td.treePrototypes = prototypes.ToArray();
-
-            const int target = 1600;
-            const int margin = 40;
-            var rand = new System.Random(1234);
-            var list = new List<TreeInstance>();
-
-            int attempts = 0;
-            while (list.Count < target && attempts < target * 10)
-            {
-                attempts++;
-                float x = margin + (float)(rand.NextDouble()) * (MapSize - margin * 2f);
-                float z = margin + (float)(rand.NextDouble()) * (MapSize - margin * 2f);
-
-                // Clustered forests, not a uniform grid.
-                float forest = Mathf.PerlinNoise(x * 0.0009f + 31f, z * 0.0009f + 6f);
-                if (forest < 0.40f) continue;
-                if (forest < 0.60f && rand.NextDouble() > 0.5) continue;
-
-                float rd = RoadDistance(x, z);
-                if (rd < RoadHalfWidth + 9f) continue;          // clear of roads
-                if (Vector2.Distance(new Vector2(x, z), Village) < PlazaRadius + 25f) continue; // clear village
-                if (DistanceToSpawn(x, z) < 20f) continue;       // clear player spawn
-                {
-                    float tax = Mathf.Abs(x - Village.x) - (FortHX + 12f);
-                    float taz = Mathf.Abs(z - Village.y) - (FortHZ + 12f);
-                    if (tax < 0f && taz < 0f) continue;          // clear the fortress + a green belt
-                }
-
-                int hx = Mathf.Clamp(Mathf.RoundToInt(x / _spacing), 0, HeightRes - 1);
-                int hz = Mathf.Clamp(Mathf.RoundToInt(z / _spacing), 0, HeightRes - 1);
-                if (SlopeAt(hx, hz) > 38f) continue;             // no trees on cliffs
-
-                float worldH = Mathf.Clamp(_h2[hz, hx], 0f, MaxHeight);
-                int protoIdx = (int)(rand.NextDouble() * prototypes.Count);
-                if (protoIdx >= prototypes.Count) protoIdx = prototypes.Count - 1;
-
-                var ti = new TreeInstance
-                {
-                    position = new Vector3(x / MapSize, worldH / MaxHeight, z / MapSize),
-                    prototypeIndex = protoIdx,
-                    widthScale = 0.8f + (float)rand.NextDouble() * 0.6f,
-                    heightScale = 0.8f + (float)rand.NextDouble() * 0.6f,
-                    rotation = (float)(rand.NextDouble() * Mathf.PI * 2f),
-                    color = Color.white,
-                    lightmapColor = Color.white
-                };
-                list.Add(ti);
-            }
-            _td.treeInstances = list.ToArray();
-            Log("Trees placed: " + list.Count);
+            if (_td == null) return;
+            int had = _td.treeInstances != null ? _td.treeInstances.Length : 0;
+            _td.treeInstances = new TreeInstance[0];
+            _td.treePrototypes = new TreePrototype[0];
+            Log("Stored terrain trees cleared: " + had + " (trees grow at runtime now).");
         }
         // =========================================================================
         //  Scene setup
@@ -716,15 +665,32 @@ namespace MysticMap.EditorTools
             var pGo = new GameObject("Player");
             pGo.transform.position = new Vector3(Spawn.x, WorldSampleHeight(Spawn.x, Spawn.y) + 0.2f, Spawn.y);
 
+            // The (Mystic Map) player is a slime: the CharacterController is auto-sized to the
+            // imported model by SlimePlayer.FitToModel(), so these are just safe defaults.
             var cc = pGo.AddComponent<CharacterController>();
-            cc.height = 1.8f; cc.radius = 0.4f; cc.center = new Vector3(0f, 0.9f, 0f);
+            cc.height = 1.2f; cc.radius = 0.5f; cc.center = new Vector3(0f, 0.6f, 0f);
 
-            var fp = pGo.AddComponent<FirstPersonPlayer>();
+            var slime = pGo.AddComponent<SlimePlayer>();
+
+            var slimeAsset = AssetDatabase.LoadAssetAtPath<GameObject>(SlimePlayerSetup.SlimeModelPath);
+            if (slimeAsset != null)
+            {
+                var model = (GameObject)PrefabUtility.InstantiatePrefab(slimeAsset, pGo.transform);
+                model.name = slimeAsset.name;
+                model.transform.localPosition = Vector3.zero;
+                model.transform.localRotation = Quaternion.identity;
+                slime.model = model.transform;
+            }
+            else
+            {
+                Debug.LogWarning("[MysticMap] Slime model not found at " + SlimePlayerSetup.SlimeModelPath +
+                                 " - the player was created without a visible body.");
+            }
 
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             camGo.transform.SetParent(pGo.transform, false);
-            camGo.transform.localPosition = new Vector3(0f, 1.62f, 0f);
+            camGo.transform.localPosition = new Vector3(0f, 1.6f, -4.5f);
 
             var cam = camGo.AddComponent<Camera>();
             cam.fieldOfView = 75f;
@@ -735,8 +701,10 @@ namespace MysticMap.EditorTools
             cam.backgroundColor = RenderSettings.fogColor;
             camGo.AddComponent<AudioListener>();
 
-            fp.cam = cam;
-            Log("Player created at " + pGo.transform.position.ToString("0.0"));
+            slime.cam = cam;
+            slime.FitToModel();   // size the controller + camera pivot to the slime mesh
+
+            Log("Slime player created at " + pGo.transform.position.ToString("0.0"));
         }
 
         // Buildings are deliberately the low-priority part: a handful around the plaza.
@@ -1568,12 +1536,13 @@ namespace MysticMap.EditorTools
             Log("Applied grass distances: grass=" + grassDist + "m glow=" + glowDist + "m.");
         }
 
-        // Where is grass allowed to glow? Everywhere except roads and the village/town.
+        // Where is grass allowed to glow? Everywhere the grass grows - including inside the
+        // town - except the roads and the paved market square.
         static bool IsGrassRegion(float x, float z)
         {
             float rd = RoadDistance(x, z);
             if (rd < RoadHalfWidth + 3f) return false;
-            if (Vector2.Distance(new Vector2(x, z), Village) < PlazaRadius + 6f) return false;
+            if (Vector2.Distance(new Vector2(x, z), Village) < PlazaRadius + 2f) return false;
             if (x < 12f || x > MapSize - 12f || z < 12f || z > MapSize - 12f) return false;
             return true;
         }
